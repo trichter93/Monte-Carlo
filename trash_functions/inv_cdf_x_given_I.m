@@ -1,4 +1,4 @@
-function Finv = inv_CDF_x_given_I(	)
+function Finv = inv_CDF_x_given_I(U, F_X, I)
     if(U==0)
         Finv = I(1);
     elseif (U==1)

@@ -99,15 +99,44 @@ end
 
 %% The inverse cdf of X ≤ x given that X in interval I
 % If p=0.2 and I=[0.25,0.75], return the x value such that F = cdf_x_given_I(x, F_X, I) = 0.2
+function Finv = inv_CDF_x_given_I(U, F_X, I) %Depreciated % 3
+    if(U==0)
+        Finv = I(1);
+    elseif (U==1)
+        Finv = I(2);
+    else
+        points=1e2;
+        x = linspace(I(1), I(2), points);
+        u = linspace(0, 1, points);
+        dp=1e-3;
+        for i=1:points
+            if(U-cdf_x_given_I(x(i), F_X, I)<=dp)
+                %Finv = (u(i) - U)*x(i-1)./(u(i)-u(i-1)) + (U - u(i-1))*x(i)./(u(i)-u(i-1));
+                Finv = x(i);
+                return;
+            end
+        end
+    end
+end
 
-function v = generate_from_Weibull_inv_CDF(lambda, k, I) % 3
+function X = generate_X_from_CDF(F_X,I) %Depreciated 4
+    U = rand;
+    X = inv_CDF_x_given_I(U, F_X, I);
+end
+
+function v = generate_from_Weibull_CDF(k, lambda, I) %Depreciated 5
+    F_v = @(v) wblcdf(v, k, lambda);
+    v = generate_X_from_inv_CDF(F_v, I);
+end
+
+function v = generate_from_Weibull_inv_CDF(lambda, k, I) % 6
     F_vinv = @(P) wblinv(P, lambda, k);
     F_v = @(v) wblcdf(v, lambda, k);
     v = generate_X_from_inv_CDF(F_vinv, F_v, I);
 end
 
 
-function Finv = inv_CDF_x_given_I2(U, F_Xinv, F_X, I) % 4
+function Finv = inv_CDF_x_given_I2(U, F_Xinv, F_X, I) % 7
     if(U==0)
         Finv = I(1);
     elseif (U==1)
@@ -118,7 +147,7 @@ function Finv = inv_CDF_x_given_I2(U, F_Xinv, F_X, I) % 4
     end
 end
 
-function X = generate_X_from_inv_CDF(F_Xinv, F_X, I) % 5
+function X = generate_X_from_inv_CDF(F_Xinv, F_X, I) % 8
     U = rand;
     X = inv_CDF_x_given_I2(U, F_Xinv, F_X, I);
 end

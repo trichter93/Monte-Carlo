@@ -1,3 +1,5 @@
+%%
+
 F_X = @(x) normcdf(x);
 F_Xinv = @(x) norminv(x);
 I=[0.1,2];
@@ -8,4 +10,8 @@ for i = 1 : 1000
 end
 
 histogram(X);
-result = sum(isnan(X(:)))
+result = sum(isnan(X(:)));
+
+%% Reality check for Weibull distribution
+
+
