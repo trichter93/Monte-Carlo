@@ -1,4 +1,4 @@
-function x = inv_CDF_x_given_I2(P, F_Xinv, F_X, I)
+function x = X_trunc(P, F_Xinv, F_X, I)
     if(P==0)
         x = I(1);
     elseif (P==1)
