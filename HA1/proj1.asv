@@ -41,11 +41,9 @@ for i = 1 : 12
         V(i,j) = wblrnd(lambda(i), k(i));
         power_outputs(i,j) = P(V(i,j));
     end
-    power_outputs_i = power_outputs(i,:); % Extracting row of power outputs for each month (Done in order to ignore zeros in next line)
-    V_i = V(i,:);
-    tau_N(i) = mean(power_outputs_i(power_outputs_i~=0)); %Taking the mean for each month, ignoring zeros
-    V_N(i) = mean(V_i(V_i~=0));
-    sigma2(i) = var(power_outputs_i(power_outputs_i~=0));
+    tau_N(i) = mean(power_outputs(i, 1:samples_per_month(i))); %Taking the mean for each month, ignoring zeros
+    V_N(i) = mean(V(i, 1:samples_per_month(i)));
+    sigma2(i) = var(power_outputs(i, 1:samples_per_month(i)));
     intervals(:,i)=[tau_N(i) - conf95*sqrt(sigma2(i)/samples_per_month(i)); tau_N(i) + conf95*sqrt(sigma2(i)/samples_per_month(i))];
 end
 
@@ -67,10 +65,9 @@ for i = 1 : 12
     for j = 1 : samples_per_month(i)
         V_trunc(i,j) = generate_X_trunc_Weibull(lambda(i), k(i), I);
         power_outputs_trunc(i,j) = P(V_trunc(i,j));
-    end
-    power_outputs_i_trunc = power_outputs_trunc(i,:); % Extracting row of power outputs for each month (Done in order to ignore zeros in next line)
-    tau_N_trunc(i) = mean(power_outputs_i_trunc(power_outputs_i~=0)); %Taking the mean for each month, ignoring zeros
-    sigma2_trunc(i) = var(power_outputs_i_trunc(power_outputs_i_trunc~=0));
+    end % Extracting row of power outputs for each month (Done in order to ignore zeros in next line)
+    tau_N_trunc(i) = mean(power_outputs_trunc(i, 1:samples_per_month(i))); %Taking the mean for each month, ignoring zeros
+    sigma2_trunc(i) = var(power_outputs_trunc(i, 1:samples_per_month(i)));
     intervals_trunc(:,i)=[tau_N_trunc(i) - conf95*sqrt(sigma2_trunc(i)/samples_per_month(i)); tau_N_trunc(i) + conf95*sqrt(sigma2_trunc(i)/samples_per_month(i))];
 end
 
@@ -91,18 +88,45 @@ interval_total_trunc = [tau_N_total_trunc - conf95*sqrt(sigma2_total_trunc/total
 V_mean_exact = zeros(12,1); % The exact mean wind speeds (theta)
 vars = zeros(12, 1); % the variances for each month
 covs = zeros(12, 1); % The covariances we are interested in for determining the optimal lambda_CV
+tau_CV = zeros(12,1);
 lambda_CV=zeros(12,1);
 for i=1:12
     V_mean_exact(i) = gamma(1+1./k(i))*lambda(i);
-    covs(i) = my_cov(power_outputs(i,:), V(i,:));
-    vars(i) = my_var(V(i,:));
-    lambda_CV
+    covs(i) = my_cov(power_outputs(i, 1:samples_per_month(i)), V(i,1:samples_per_month(i)));
+    vars(i) = my_var(V(i,1:samples_per_month(i)));
+    lambda_CV(i) = - covs(i)/vars(i);
+    tau_CV(i) = tau_N(i) + lambda_CV(i) * (V_N(i) - V_mean_exact(i));
 end
 
-lambda_CV = ;
 
 
 %% Using importance sampling, ie
+
+V_IS = zeros(12, 31*samples_per_day); % Pre-allocating for wind speed samples, row is month, column is day
+power_outputs_IS = zeros(12, 31*samples_per_day); % Pre-allocating for power output samples, row is month, column is day
+
+% Instead of generate_X_trunc_Weibull use non trunc version:
+
+tau_N_IS=zeros(1,12);% Pre-allocating for mean power outputs per month
+V_IS_N = zeros(1,12);
+sigma2_IS=zeros(1,12);
+intervals = zeros(2,12);
+for i = 1 : 12
+    for j = 1 : samples_per_month(i)
+        V_IS(i,j) = wblrnd(lambda(i), k(i));
+        power_outputs_IS(i,j) = P(V(i,j));
+    end
+    tau_N_IS(i) = mean(power_outputs_IS(i, 1:samples_per_month(i))); %Taking the mean for each month, ignoring zeros
+    V_IS_N(i) = mean(V_IS(i, 1:samples_per_month(i)));
+    sigma2_IS(i) = var(power_outputs_IS(i, 1:samples_per_month(i)));
+    intervals(:,i)=[tau_N_IS(i) - conf95*sqrt(sigma2_IS(i)/samples_per_month(i)); tau_N_IS(i) + conf95*sqrt(sigma2_IS(i)/samples_per_month(i))];
+end
+
+tau_N_IS_total = mean(tau_N_IS);
+sigma2_IS_total = var(power_outputs_IS(:));
+
+interval_total = [tau_N_IS_total - conf95*sqrt(sigma2_total/total_N), tau_N_total + conf95*sqrt(sigma2_total/total_N)];
+
 
 %% Doing Antithetic sampling, ie
 
@@ -197,6 +221,6 @@ function cov = my_cov(X,Y)
     mY = mean(Y);
     cov=0;
     for i =1:N
-        cov = cov + (X(i) - mX) *b(Y(i) - mY)/N/(N-1);
+        cov = cov + (X(i) - mX) * (Y(i) - mY)/N/(N-1);
     end
 end

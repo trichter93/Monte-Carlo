@@ -102,6 +102,36 @@ end
 
 %% Using importance sampling, ie
 
+V_IS = zeros(12, 31*samples_per_day); % Pre-allocating for wind speed samples, row is month, column is day
+power_outputs_IS = zeros(12, 31*samples_per_day); % Pre-allocating for power output samples, row is month, column is day
+
+% Instead of generate_X_trunc_Weibull use non trunc version:
+
+tau_N_IS=zeros(1,12);% Pre-allocating for mean power outputs per month
+V_IS_N = zeros(1,12);
+sigma2_IS=zeros(1,12);
+intervals_IS = zeros(2,12);
+V_var_exact = zeros(1,12);
+weights_IS=zeros(12,samples_per_day*31);
+for i = 1 : 12
+    V_var_exact(i)= wblvar(lambda(i),k(i));
+    for j = 1 : samples_per_month(i)
+        V_IS(i,j) = normrnd(V_mean_exact(i), sqrt(V_var_exact(i)));
+        weights_IS(i,j) = wblpdf(V_IS(i,j),lambda(i), k(i))./normpdf(V_IS(i,j), V_mean_exact(i), sqrt(V_var_exact(i)));
+        power_outputs_IS(i,j) = P(V_IS(i,j));
+    end
+    tau_N_IS(i) = mean(power_outputs_IS(i, 1:samples_per_month(i)).*weights_IS(i,1:samples_per_month(i))); %Taking the mean for each month, ignoring zeros
+    V_IS_N(i) = mean(V_IS(i, 1:samples_per_month(i)));
+    sigma2_IS(i) = var(power_outputs_IS(i, 1:samples_per_month(i)));
+    intervals_IS(:,i)=[tau_N_IS(i) - conf95*sqrt(sigma2_IS(i)/samples_per_month(i)); tau_N_IS(i) + conf95*sqrt(sigma2_IS(i)/samples_per_month(i))];
+end
+
+tau_N_IS_total = mean(tau_N_IS);
+sigma2_IS_total = var(power_outputs_IS(:));
+
+interval_IS_total = [tau_N_IS_total - conf95*sqrt(sigma2_IS_total/total_N), tau_N_IS_total + conf95*sqrt(sigma2_IS_total/total_N)];
+
+
 %% Doing Antithetic sampling, ie
 
 %% Calculating probability that turbine delivers power, ie P(power > 0)
@@ -197,4 +227,8 @@ function cov = my_cov(X,Y)
     for i =1:N
         cov = cov + (X(i) - mX) * (Y(i) - mY)/N/(N-1);
     end
+end
+
+function m = wblvar(lambda, k)
+    m = lambda.^2 * (gamma(1+2/k)-gamma(1+1/k).^2);
 end
