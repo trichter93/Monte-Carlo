@@ -219,7 +219,7 @@ function var = my_var(X)
     end
 end
 
-function cov = my_cov(X,Y)
+function [cov, corr] = my_cov(X,Y)
     N= length(X);
     mX = mean(X);
     mY = mean(Y);
@@ -227,6 +227,7 @@ function cov = my_cov(X,Y)
     for i =1:N
         cov = cov + (X(i) - mX) * (Y(i) - mY)/N/(N-1);
     end
+    corr = cov ./ sqrt(my_var(X) * my_var(Y));
 end
 
 function m = wblvar(lambda, k)
