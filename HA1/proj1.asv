@@ -58,6 +58,7 @@ interval_total = [tau_N_total - conf95*sqrt(sigma2_total/total_N), tau_N_total +
 V_trunc=zeros(12, 31*samples_per_day); % Pre-allocating for wind speed samples, row is month, column is day
 power_outputs_trunc = zeros(12, 31*samples_per_day); % Pre-allocating for power output samples, row is month, column is day
 tau_N_trunc=zeros(1,12); % Pre-allocating for mean power outputs per month
+V_N_trunc = zeros(1,12);
 sigma2_trunc=zeros(1,12);
 intervals_trunc = zeros(2,12);
 I=[3,30]; % the trunc interval
@@ -67,6 +68,7 @@ for i = 1 : 12
         power_outputs_trunc(i,j) = P(V_trunc(i,j));
     end % Extracting row of power outputs for each month (Done in order to ignore zeros in next line)
     tau_N_trunc(i) = mean(power_outputs_trunc(i, 1:samples_per_month(i))); %Taking the mean for each month, ignoring zeros
+    V_N_trunc(i) = mean(V_trunc(i, 1:samples_per_month(i)));
     sigma2_trunc(i) = var(power_outputs_trunc(i, 1:samples_per_month(i)));
     intervals_trunc(:,i)=[tau_N_trunc(i) - conf95*sqrt(sigma2_trunc(i)/samples_per_month(i)); tau_N_trunc(i) + conf95*sqrt(sigma2_trunc(i)/samples_per_month(i))];
 end
@@ -88,15 +90,21 @@ interval_total_trunc = [tau_N_total_trunc - conf95*sqrt(sigma2_total_trunc/total
 V_mean_exact = zeros(12,1); % The exact mean wind speeds (theta)
 vars = zeros(12, 1); % the variances for each month
 covs = zeros(12, 1); % The covariances we are interested in for determining the optimal lambda_CV
+sigma2_CV = zeros(12,1); % fomula : sigma2 +2 * lambda_CV * cov + lambda_CV^2 + var(Y)
 tau_CV = zeros(12,1);
 lambda_CV=zeros(12,1);
+intervals_CV = zeros(2,12);
 for i=1:12
     V_mean_exact(i) = gamma(1+1./k(i))*lambda(i);
-    covs(i) = my_cov(power_outputs(i, 1:samples_per_month(i)), V(i,1:samples_per_month(i)));
-    vars(i) = my_var(V(i,1:samples_per_month(i)));
+    covsi = cov(power_outputs_trunc(i, 1:samples_per_month(i)), V_trunc(i,1:samples_per_month(i)));
+    covs(i) = covsi(2,1);
+    vars(i) = var(V_trunc(i,1:samples_per_month(i)));
     lambda_CV(i) = - covs(i)/vars(i);
-    tau_CV(i) = tau_N(i) + lambda_CV(i) * (V_N(i) - V_mean_exact(i));
+    sigma2_CV(i) = sigma2(i) + 2.* lambda_CV(i) * covs(i) + lambda_CV(i).^2 .* var(V_trunc(i,1:samples_per_month(i)));
+    tau_CV(i) = tau_N_trunc(i) + lambda_CV(i) * (V_N_trunc(i) - V_mean_exact(i));
+    intervals_CV(:,i) = [tau_CV(i) - conf95*sqrt(sigma2_CV(i)/samples_per_month(i)); tau_CV(i) + conf95*sqrt(sigma2_CV(i)/samples_per_month(i))];
 end
+
 
 
 
@@ -110,36 +118,64 @@ power_outputs_IS = zeros(12, 31*samples_per_day); % Pre-allocating for power out
 tau_N_IS=zeros(1,12);% Pre-allocating for mean power outputs per month
 V_IS_N = zeros(1,12);
 sigma2_IS=zeros(1,12);
-intervals = zeros(2,12);
+intervals_IS = zeros(2,12);
+V_var_exact = zeros(1,12);
+weights_IS=zeros(12,samples_per_day*31);
+vx=linspace(0,35,1000);
 for i = 1 : 12
+    V_var_exact(i)= wblvar(lambda(i),k(i));
     for j = 1 : samples_per_month(i)
-        V_IS(i,j) = wblrnd(lambda(i), k(i));
-        power_outputs_IS(i,j) = P(V(i,j));
+        wbl = @(v) wblpdf(v, lambda(i), k(i));
+        [maxy, maxx] = max(P(vx)'.*wbl(vx));
+        normtemp = @(v) normcdf(v, vx(maxx), sqrt(V_var_exact3));
+        norminvtemp = @(v) norminv(v, vx(maxx), sqrt(V_var_exact3));
+        V_IS(i, j) = generate_X_trunc(norminvtemp, normtemp, I);
+        weights_IS(i,j) = wblpdf(V_IS(i,j),lambda(i), k(i))./normpdf(V_IS(i,j), vx(maxx), sqrt(V_var_exact(i)));
+        power_outputs_IS(i,j) = P(V_IS(i,j));
     end
-    tau_N_IS(i) = mean(power_outputs_IS(i, 1:samples_per_month(i))); %Taking the mean for each month, ignoring zeros
+    tau_N_IS(i) = mean(power_outputs_IS(i, 1:samples_per_month(i)).*weights_IS(i,1:samples_per_month(i))); %Taking the mean for each month, ignoring zeros
     V_IS_N(i) = mean(V_IS(i, 1:samples_per_month(i)));
     sigma2_IS(i) = var(power_outputs_IS(i, 1:samples_per_month(i)));
-    intervals(:,i)=[tau_N_IS(i) - conf95*sqrt(sigma2_IS(i)/samples_per_month(i)); tau_N_IS(i) + conf95*sqrt(sigma2_IS(i)/samples_per_month(i))];
+    intervals_IS(:,i)=[tau_N_IS(i) - conf95*sqrt(sigma2_IS(i)/samples_per_month(i)); tau_N_IS(i) + conf95*sqrt(sigma2_IS(i)/samples_per_month(i))];
 end
 
 tau_N_IS_total = mean(tau_N_IS);
 sigma2_IS_total = var(power_outputs_IS(:));
 
-interval_total = [tau_N_IS_total - conf95*sqrt(sigma2_total/total_N), tau_N_total + conf95*sqrt(sigma2_total/total_N)];
+interval_IS_total = [tau_N_IS_total - conf95*sqrt(sigma2_IS_total/total_N), tau_N_IS_total + conf95*sqrt(sigma2_IS_total/total_N)];
 
 
 %% Doing Antithetic sampling, ie
 
 %% Calculating probability that turbine delivers power, ie P(power > 0)
 
+PPg0 = zeros(1,12);
+
+for i = 1 : 12
+    temp_power_outputs =power_outputs(i, 1:samples_per_month(i));
+    PPg0(i) = length(temp_power_outputs(temp_power_outputs ~= 0))/length(temp_power_outputs);
+end
 %% Estimate average ratio of actual wind turbine output to total wind power, ie E(p)/E(ptot)
 
 Ptot = @(v) 1/2 * rho * pi * d.^2 /4 * v.^3; % The analytical function represented by
 
-% (Use the analytical function Ptot
+% (Use the analytical function Ptot)
+
+average_power_coefficient = zeros(1,12);
+intervals_apc = zeros(2,12);
+for i =1:12
+    average_power_coefficient(i) = tau_N(i)/Ptot(V_N(i));
+    intervals_apc(:,i) = [average_power_coefficient(i) - conf95*sqrt(sigma2(i)/samples_per_month(i))/Ptot(V_N(i)), average_power_coefficient(i) + conf95*sqrt(sigma2(i)/samples_per_month(i))/Ptot(V_N(i))]';
+end
+
 
 %% Capacity factor and availability factor
 
+cf = zeros(1,12);
+
+for i = 1 : 12
+    cf(i) = sum(power_outputs(i,1:samples_per_month(i)))/(15e6*samples_per_month(i));
+end
 
 %% 3 Combined power production of two wind turbines
 %% tests
@@ -163,7 +199,81 @@ total = integral(p, 0.27, 0.74,'ArrayValued', true);
 
 %clearvars -except [conf95, k, lambda, tau_N];
 
-%%
+%% Exercise 3, Multivariate Weibull distributions
+%constants
+alpha3 = 0.638;
+p3 = 3;
+q3 = 1.5;
+
+lambda3 = 10.05;
+k3 = 1.95;
+
+%% Defining the pdf, cdf, bivariate pdf and bivariate cdf
+
+Fv = @(v) wblcdf(v, lambda3, k3);
+fv = @(v) wblpdf(v, lambda3, k3);
+
+
+F12 = @(v1,v2) Fv(v1) .* Fv(v2) .* (1 + alpha3 .* (1-Fv(v1).^p3).^q3 .* (1-Fv(v2).^p3).^q3);
+f12 = @(v1,v2)  fv(v1) .* fv(v2) .* (1 + alpha3.*(1-Fv(v1).^p3).^(q3-1) .* (1-Fv(v2).^p3).^(q3-1) .* (Fv(v1).^p3 .* (1+p3.*q3) - 1) .* (Fv(v2).^p3 .* (1+p3.*q3) - 1));
+
+integral2(f12, 0, 10, 0, 10) % sanity check
+F12(10,10) % should and is equal to one line above
+%% a, ie finding E(P(V1)+P(V2))
+% Each marginal distribution is Weibull, and E(P(V1) = E(P(V2)). Hence only
+% 1 needs to be calculated. => Use importance sampling again
+
+V3 = zeros(1, 1000); % Pre-allocating for wind speed samples, row is month, column is day
+power_outputs3 = zeros(1, 1000); % Pre-allocating for power output samples, row is month, column is day
+
+% Instead of generate_X_trunc_Weibull use non trunc version:
+% Pre-allocating for mean power outputs per month
+
+weights3=zeros(1,1000);
+vx=linspace(0,35,1000);
+V_var_exact3 = wblvar(lambda3,k3);
+for j = 1 : 1000
+    wbl3 = @(v) wblpdf(v, lambda3, k3);
+    [maxy, maxx] = max(P(vx)'.*wbl(vx));
+    normtemp = @(v) normcdf(v, vx(maxx), sqrt(V_var_exact3));
+    norminvtemp = @(v) norminv(v, vx(maxx), sqrt(V_var_exact3));
+    V3(j) = generate_X_trunc(norminvtemp, normtemp, I);
+    weights3(j) = wblpdf(V3(j), lambda3, k3)./normpdf(V3(j), vx(maxx), sqrt(V_var_exact3));
+    power_outputs3(j) = P(V3(j));
+end
+tau_N3 = mean(power_outputs3(:).*weights3(:)); %Taking the mean for each month, ignoring zeros
+V_N3 = mean(V3(:));
+sigma23 = var(power_outputs3(:));
+interval3=[tau_N3 - conf95*sqrt(sigma23/1000); tau_N3 + conf95*sqrt(sigma23/1000)];
+%% b, ie finding C(P(v1), P(v2)). Use classical expression C(X,Y) = E(XY) - E(X)E(Y)
+
+% yields 3 integrals:
+
+% E(X) = integral( x * f(x,y) dx dy), E(Y)=integral( y * f(x,y) dx dy) KNOWN
+% E(XY) = integral( xy * f(x,y) dx dy)
+
+% Should use importance sampling for both directions
+
+% XY = P(V1)*P(V2) where V1 and V2 are generated with the help of mvnrnd 
+
+% In order to generate a 2D space that can be used to find the values
+% P(v1,v2)*wblpdf(v1,v2) Use meshgrid on two of the same size linspaces
+V32 = zeros(1, 1000); % Pre-allocating for wind speed samplesy
+power_outputs32 = zeros(1, 1000); % Pre-allocating for power output samples
+
+
+% where mu is argmax( P
+
+v1 = linspace(0,35,1000);
+v2 = linspace(0,35,1000);
+
+[V1,V2] = meshgrid(v1,v2);
+weights32 = zeros(1000,1000);
+for i = 1:1000
+    for j = 1:1000
+        [maxy, maxx] = max(P(V1(i)).*P(V2(j))'.*f12(V1(i), V2(j));
+    end
+end
 
 %% The cdf of X ≤ x given that X in interval I
 function F = F_X_trunc(x, F_X, I) % 1
@@ -215,7 +325,7 @@ function var = my_var(X)
     end
 end
 
-function cov = my_cov(X,Y)
+function [cov, corr] = my_cov(X,Y)
     N= length(X);
     mX = mean(X);
     mY = mean(Y);
@@ -223,4 +333,9 @@ function cov = my_cov(X,Y)
     for i =1:N
         cov = cov + (X(i) - mX) * (Y(i) - mY)/N/(N-1);
     end
+    corr = cov ./ sqrt(my_var(X) * my_var(Y));
+end
+
+function m = wblvar(lambda, k)
+    m = lambda.^2 * (gamma(1+2/k)-gamma(1+1/k).^2);
 end
