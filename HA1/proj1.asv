@@ -127,8 +127,8 @@ for i = 1 : 12
     for j = 1 : samples_per_month(i)
         wbl = @(v) wblpdf(v, lambda(i), k(i));
         [maxy, maxx] = max(P(vx)'.*wbl(vx));
-        normtemp = @(v) normcdf(v, vx(maxx), sqrt(V_var_exact3));
-        norminvtemp = @(v) norminv(v, vx(maxx), sqrt(V_var_exact3));
+        normtemp = @(v) normcdf(v, vx(maxx), sqrt(V_var_exact(i)));
+        norminvtemp = @(v) norminv(v, vx(maxx), sqrt(V_var_exact(i)));
         V_IS(i, j) = generate_X_trunc(norminvtemp, normtemp, I);
         weights_IS(i,j) = wblpdf(V_IS(i,j),lambda(i), k(i))./normpdf(V_IS(i,j), vx(maxx), sqrt(V_var_exact(i)));
         power_outputs_IS(i,j) = P(V_IS(i,j));
@@ -180,21 +180,21 @@ end
 %% 3 Combined power production of two wind turbines
 %% tests
 
-F_X = @(x) normcdf(x);
-
-f_X = @(x) normpdf(x);
-
-I=[0.25,0.75];
-
-Ptest = F_X_trunc(0.7, F_X, I);
-
-p= @(x) fX_trunc(x, f_X, I);
-
-x=linspace(0.25,0.75,1e3);
-
-plot(x,p(x));
-
-total = integral(p, 0.27, 0.74,'ArrayValued', true);
+% F_X = @(x) normcdf(x);
+% 
+% f_X = @(x) normpdf(x);
+% 
+% I=[0.25,0.75];
+% 
+% Ptest = F_X_trunc(0.7, F_X, I);
+% 
+% p= @(x) fX_trunc(x, f_X, I);
+% 
+% x=linspace(0.25,0.75,1e3);
+% 
+% plot(x,p(x));
+% 
+% total = integral(p, 0.27, 0.74,'ArrayValued', true);
 %% Clearing all variables except the relevant ones for the rest of the experiment
 
 %clearvars -except [conf95, k, lambda, tau_N];
@@ -217,8 +217,8 @@ fv = @(v) wblpdf(v, lambda3, k3);
 F12 = @(v1,v2) Fv(v1) .* Fv(v2) .* (1 + alpha3 .* (1-Fv(v1).^p3).^q3 .* (1-Fv(v2).^p3).^q3);
 f12 = @(v1,v2)  fv(v1) .* fv(v2) .* (1 + alpha3.*(1-Fv(v1).^p3).^(q3-1) .* (1-Fv(v2).^p3).^(q3-1) .* (Fv(v1).^p3 .* (1+p3.*q3) - 1) .* (Fv(v2).^p3 .* (1+p3.*q3) - 1));
 
-integral2(f12, 0, 10, 0, 10) % sanity check
-F12(10,10) % should and is equal to one line above
+%integral2(f12, 0, 10, 0, 10) % sanity check
+%F12(10,10) % should and is equal to one line above
 %% a, ie finding E(P(V1)+P(V2))
 % Each marginal distribution is Weibull, and E(P(V1) = E(P(V2)). Hence only
 % 1 needs to be calculated. => Use importance sampling again
@@ -232,16 +232,16 @@ power_outputs3 = zeros(1, 1000); % Pre-allocating for power output samples, row 
 weights3=zeros(1,1000);
 vx=linspace(0,35,1000);
 V_var_exact3 = wblvar(lambda3,k3);
+wbl3 = @(v) wblpdf(v, lambda3, k3);
+[maxy, maxx] = max(P(vx)'.*wbl3(vx));
+normtemp = @(v) normcdf(v, vx(maxx), sqrt(V_var_exact3));
+norminvtemp = @(v) norminv(v, vx(maxx), sqrt(V_var_exact3));
 for j = 1 : 1000
-    wbl3 = @(v) wblpdf(v, lambda3, k3);
-    [maxy, maxx] = max(P(vx)'.*wbl(vx));
-    normtemp = @(v) normcdf(v, vx(maxx), sqrt(V_var_exact3));
-    norminvtemp = @(v) norminv(v, vx(maxx), sqrt(V_var_exact3));
     V3(j) = generate_X_trunc(norminvtemp, normtemp, I);
     weights3(j) = wblpdf(V3(j), lambda3, k3)./normpdf(V3(j), vx(maxx), sqrt(V_var_exact3));
     power_outputs3(j) = P(V3(j));
 end
-tau_N3 = mean(power_outputs3(:).*weights3(:)); %Taking the mean for each month, ignoring zeros
+tau_N3 = mean(power_outputs3(:).*weights3(:));
 V_N3 = mean(V3(:));
 sigma23 = var(power_outputs3(:));
 interval3=[tau_N3 - conf95*sqrt(sigma23/1000); tau_N3 + conf95*sqrt(sigma23/1000)];
@@ -258,8 +258,8 @@ interval3=[tau_N3 - conf95*sqrt(sigma23/1000); tau_N3 + conf95*sqrt(sigma23/1000
 
 % In order to generate a 2D space that can be used to find the values
 % P(v1,v2)*wblpdf(v1,v2) Use meshgrid on two of the same size linspaces
-V32 = zeros(1, 1000); % Pre-allocating for wind speed samplesy
-power_outputs32 = zeros(1, 1000); % Pre-allocating for power output samples
+V32 = zeros(2, 1000); % Pre-allocating for wind speed samples
+power_outputs32 = zeros(2, 1000); % Pre-allocating for power output samples
 
 
 % where mu is argmax( P
@@ -268,13 +268,27 @@ v1 = linspace(0,35,1000);
 v2 = linspace(0,35,1000);
 
 [V1,V2] = meshgrid(v1,v2);
-weights32 = zeros(1000,1000);
+
+weights32 = zeros(1,1000);
+f12dist = f12(V1, V2);
+PV1 = reshape(P(V1),[1000,1000]);
+PV2 = reshape(P(V2),[1000,1000]);
+prod_mat = (PV1'.*PV2)'.*f12dist; % the values per row and the columns they occur at
+[~, row] = max(max(prod_mat));
+[~, col] = max(prod_mat(row,:));
+covar_mat = 20*eye(2);
 for i = 1:1000
-    for j = 1:1000
-        [maxy, maxx] = max(P(V1(i)).*P(V2(j))'.*f12(V1(i), V2(j));
-    end
+    V32(:,i)=mvnrnd(mu, covar_mat);
+    weights32(i) = f12(V32(1,i),V32(2,i))/mvnpdf([V32(1,i),V32(2,i)], mu, covar_mat);
+    power_outputs32(:,i)=P(V32(:,i));
 end
 
+E_PV1PV2 = mean(power_outputs32(1,:) .* power_outputs32(2,:).*weights32);
+
+C_PV1PV2 = E_PV1PV2 - tau_N3^2;
+%%
+
+Var_PV1pPV2 = 2 * C_PV1PV2 + 2 * sigma23
 %% The cdf of X ≤ x given that X in interval I
 function F = F_X_trunc(x, F_X, I) % 1
     if (x >= I(1) && x<= I(2))
@@ -314,26 +328,6 @@ end
 function X = generate_X_trunc(F_Xinv, F_X, I) % 5
     U = rand;
     X = X_trunc(U, F_Xinv, F_X, I);
-end
-
-function var = my_var(X)
-    N= length(X);
-    mX = mean(X);
-    var = 0;
-    for i = 1:N
-        var = var + (X(i) - mX).^2 / N / (N-1);
-    end
-end
-
-function [cov, corr] = my_cov(X,Y)
-    N= length(X);
-    mX = mean(X);
-    mY = mean(Y);
-    cov=0;
-    for i =1:N
-        cov = cov + (X(i) - mX) * (Y(i) - mY)/N/(N-1);
-    end
-    corr = cov ./ sqrt(my_var(X) * my_var(Y));
 end
 
 function m = wblvar(lambda, k)
