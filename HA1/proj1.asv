@@ -4,11 +4,12 @@
 %clear;
 load powercurve_D236.mat
 %% plotting power curve
+close all;
 x = linspace(0,35,1e4);
 plot(x, P(x));
 grid on;
 xlabel('Wind speed v [m/s]')
-ylabel('Power output P (v) [kW]');
+ylabel('Power output P (v) [W]');
 hold on;
 
 %% Power production of a turbine
@@ -140,11 +141,20 @@ end
 tau_N_IS_total = mean(tau_N_IS);
 sigma2_IS_total = var(power_outputs_IS(:));
 
-interval_IS_total = [tau_N_IS_total - conf95*sqrt(sigma2_IS_total/total_N), tau_N_IS_total + conf95*sqrt(sigma2_IS_total/total_N)];
+interval_IS_total = [tau_N_IS_total - conf95 * sqrt(sigma2_IS_total/total_N), tau_N_IS_total + conf95*sqrt(sigma2_IS_total/total_N)];
 
 
 %% Doing Antithetic sampling, ie
+%% Doing Antithetic sampling
 
+intervals_AS = zeros(2,12);
+var_AS = zeros(1,12);
+mu_AS = zeros(1,12);
+
+for i = 1:12
+    [var_AS(i), mu_AS(i)] = antithetic(P, @(p) X_trunc(, wblinv(p, lambda(i), k(i)), wblcdf(, I), samples_per_month(i));
+    intervals_AS(:,i) = [mu_AS(i) - conf95*sqrt(var_AS(i)/samples_per_month(i)); mu_AS(i) + conf95*sqrt(var_AS(i)/samples_per_month(i))];
+end
 %% Calculating probability that turbine delivers power, ie P(power > 0)
 
 PPg0 = zeros(1,12);
@@ -295,25 +305,31 @@ std_PV1pPV2 = sqrt(Var_PV1pPV2);
 % If I can sample from this distribution then that would surely help
 
 % I have F(v1,v2) and f(v1,v2), ie P(V1 < v1 and V2 < v2) and the corresponding pdf
-
-V3d2 = zeros(2, 1000); % Pre-allocating for wind speed samples
-power_outputs3d2 = zeros(2, 1000); % Pre-allocating for power output samples
-
-successes = zeros(1,1000);
-for i = 1:1000
+N= 10000;
+V3d2 = zeros(2, N); % Pre-allocating for wind speed samples
+power_outputs3d2 = zeros(2, N); % Pre-allocating for power output samples
+weights3d2 = zeros(1,N);
+successes = zeros(1,N);
+fails = ones(1,N);
+for i = 1:N
     V3d2(:,i)=mvnrnd(mu, covar_mat);
-    weights32(i) = f12(V3d2(1,i),V3d2(2,i))/mvnpdf([V3d2(1,i),V3d2(2,i)], mu, covar_mat);
+    weights3d2(i) = f12(V3d2(1,i),V3d2(2,i))/mvnpdf([V3d2(1,i),V3d2(2,i)], mu, covar_mat);
     power_outputs3d2(:,i)=P(V3d2(:,i));
     if sum(power_outputs3d2(:,i)) > 15*1e6
         successes(i) = 1;
+        fails(i) = 0;
     end
 end
-var_3d2 = var(successes.*weights32);
-P_3d2 = mean(successes.*weights32);
+var_3d2s = var(successes.*weights3d2);
+P_3d2s = mean(successes.*weights3d2);
 
-interval_3d2 = [P_3d2 - conf95 * sqrt(var_3d2/1000) ; P_3d2 + conf95 * sqrt(var_3d2/1000)];
+var_3d2f = var(fails.*weights3d2);
+P_3d2f = mean(fails.*weights3d2);
 
 
+interval_3d2s = [P_3d2s - conf95 * sqrt(var_3d2s/N) ; P_3d2s + conf95 * sqrt(var_3d2s/N)];
+
+interval_3d2f = [P_3d2f - conf95 * sqrt(var_3d2f/N) ; P_3d2f + conf95 * sqrt(var_3d2f/N)];
 
 %% The cdf of X ≤ x given that X in interval I
 function F = F_X_trunc(x, F_X, I) % 1
@@ -358,4 +374,18 @@ end
 
 function m = wblvar(lambda, k)
     m = lambda.^2 * (gamma(1+2/k)-gamma(1+1/k).^2);
+end
+function [vAS, muAS] = antithetic(phi, Finv, N)
+    U = rand(N,1); %uniform distribustion
+
+    V = phi(Finv(U));
+    Vt = phi(Finv(1-U));
+
+    mu1 = (1/N)*sum(V); 
+    mu2 = (1/N)*sum(Vt);
+
+    muAS = (mu1+mu2)/2;
+
+    covM = cov(V,Vt);
+    vAS = sum(covM(:))/4;
 end
