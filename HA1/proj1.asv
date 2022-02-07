@@ -20,10 +20,10 @@ conf95 = 1.96;  % 95% confidence interval
 d = 236; % height of wind plant
 rho = 1.225; % air density
 ideal_power_coeff = 16/27; % self explanatory
-samples_per_day=33;
 lambda = [11.7, 10.7, 10.1, 8.8, 8.6, 8.9, 8.6, 8.9, 10.0, 10.9, 11.7, 11.7]; %  Weibull parameters according to HA1 description
 k = [2.0, 2.0, 2.0, 1.9, 1.9, 1.9, 1.9, 1.9, 2.0, 1.9, 2.0, 2.0]; %  Weibull parameters according to HA1 description
-samples_per_month = samples_per_day*[31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31]; % Assuming 1 sample per day, can easily be increased
+samples_per_day=33;
+samples_per_month = samples_per_day*[31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31]; % Assuming some nr of samples per day, can easily be increased
 total_N = sum(samples_per_month); % Total number of samples (obviously)
 
 %% Sampling from non-trunc distribution and using CLT to determine Tau_N for each month(amount of power generated) = tau_N, solves first part of a)
@@ -50,7 +50,7 @@ end
 tau_N_total = mean(tau_N);
 sigma2_total = var(power_outputs(:));
 
-interval_total = [tau_N_total - conf95*sqrt(sigma2_total/total_N), tau_N_total + conf95*sqrt(sigma2_total/total_N)];
+interval_total = [tau_N_total - conf95*sqrt(sigma2_total/total_N); tau_N_total + conf95*sqrt(sigma2_total/total_N)];
 
 
 
@@ -112,8 +112,6 @@ end
 
 V_IS = zeros(12, 31*samples_per_day); % Pre-allocating for wind speed samples, row is month, column is day
 power_outputs_IS = zeros(12, 31*samples_per_day); % Pre-allocating for power output samples, row is month, column is day
-
-% Instead of generate_X_trunc_Weibull use non trunc version:
 
 tau_N_IS=zeros(1,12);% Pre-allocating for mean power outputs per month
 V_IS_N = zeros(1,12);
@@ -273,7 +271,7 @@ weights32 = zeros(1,1000);
 f12dist = f12(V1, V2);
 PV1 = reshape(P(V1),[1000,1000]);
 PV2 = reshape(P(V2),[1000,1000]);
-prod_mat = (PV1'.*PV2)'.*f12dist; % the values per row and the columns they occur at
+prod_mat = ((PV1'.*PV2)'.*f12dist)'; % the values per row and the columns they occur at
 [~, row] = max(max(prod_mat));
 [~, col] = max(prod_mat(row,:));
 covar_mat = 20*eye(2);
@@ -286,9 +284,37 @@ end
 E_PV1PV2 = mean(power_outputs32(1,:) .* power_outputs32(2,:).*weights32);
 
 C_PV1PV2 = E_PV1PV2 - tau_N3^2;
-%%
+%% The variance and the std of the sum P(V1)+P(V2), perhaps too simple... But no idea why it wouldnt be like this
 
-Var_PV1pPV2 = 2 * C_PV1PV2 + 2 * sigma23
+Var_PV1pPV2 = 2 * C_PV1PV2 + 2 * sigma23;
+
+std_PV1pPV2 = sqrt(Var_PV1pPV2);
+
+%% Finding the 95% conf interval for the probabilities P(P(V1)+P(V2) > 15 MW) and P(P(V1)+P(V2) < 15 MW)
+
+% If I can sample from this distribution then that would surely help
+
+% I have F(v1,v2) and f(v1,v2), ie P(V1 < v1 and V2 < v2) and the corresponding pdf
+
+V3d2 = zeros(2, 1000); % Pre-allocating for wind speed samples
+power_outputs3d2 = zeros(2, 1000); % Pre-allocating for power output samples
+
+successes = zeros(1,1000);
+for i = 1:1000
+    V3d2(:,i)=mvnrnd(mu, covar_mat);
+    weights32(i) = f12(V3d2(1,i),V3d2(2,i))/mvnpdf([V3d2(1,i),V3d2(2,i)], mu, covar_mat);
+    power_outputs3d2(:,i)=P(V3d2(:,i));
+    if sum(power_outputs3d2(:,i)) > 15*1e6
+        successes(i) = 1;
+    end
+end
+var_3d2 = var(successes.*weights32);
+P_3d2 = mean(successes.*weights32);
+
+interval_3d2 = [P_3d2 - conf95 * sqrt(var_3d2/1000) ; P_3d2 + conf95 * sqrt(var_3d2/1000)];
+
+
+
 %% The cdf of X ≤ x given that X in interval I
 function F = F_X_trunc(x, F_X, I) % 1
     if (x >= I(1) && x<= I(2))
