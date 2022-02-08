@@ -186,6 +186,8 @@ for i = 1 : 12
     cf(i) = sum(power_outputs(i,1:samples_per_month(i)))/(15e6*samples_per_month(i));
 end
 
+af = zeros(1,12);
+
 %% 3 Combined power production of two wind turbines
 %% tests
 
@@ -267,26 +269,28 @@ interval3=[tau_N3 - conf95*sqrt(sigma23/1000); tau_N3 + conf95*sqrt(sigma23/1000
 
 % In order to generate a 2D space that can be used to find the values
 % P(v1,v2)*wblpdf(v1,v2) Use meshgrid on two of the same size linspaces
-V32 = zeros(2, 1000); % Pre-allocating for wind speed samples
-power_outputs32 = zeros(2, 1000); % Pre-allocating for power output samples
+N=10000;
+V32 = zeros(2, N); % Pre-allocating for wind speed samples
+power_outputs32 = zeros(2, N); % Pre-allocating for power output samples
 
 
 % where mu is argmax( P
 
-v1 = linspace(0,35,1000);
-v2 = linspace(0,35,1000);
+v1 = linspace(0,35,N);
+v2 = linspace(0,35,N);
 
 [V1,V2] = meshgrid(v1,v2);
 
-weights32 = zeros(1,1000);
+weights32 = zeros(1,N);
 f12dist = f12(V1, V2);
-PV1 = reshape(P(V1),[1000,1000]);
-PV2 = reshape(P(V2),[1000,1000]);
+PV1 = reshape(P(V1),[N,N]);
+PV2 = reshape(P(V2),[N,N]);
 prod_mat = ((PV1'.*PV2)'.*f12dist)'; % the values per row and the columns they occur at
 [~, row] = max(max(prod_mat));
 [~, col] = max(prod_mat(row,:));
+mu = [v1(row), v2(col)];
 covar_mat = 20*eye(2);
-for i = 1:1000
+for i = 1:N
     V32(:,i)=mvnrnd(mu, covar_mat);
     weights32(i) = f12(V32(1,i),V32(2,i))/mvnpdf([V32(1,i),V32(2,i)], mu, covar_mat);
     power_outputs32(:,i)=P(V32(:,i));
