@@ -335,7 +335,20 @@ P_3d2f = mean(fails.*weights3d2);
 interval_3d2s = [P_3d2s - conf95 * sqrt(var_3d2s/N) ; P_3d2s + conf95 * sqrt(var_3d2s/N)];
 
 interval_3d2f = [P_3d2f - conf95 * sqrt(var_3d2f/N) ; P_3d2f + conf95 * sqrt(var_3d2f/N)];
-
+%%
+precision = 4;
+table1 = latex(vpa(sym(intervals./1e6),precision));
+table2 = latex(vpa(sym(intervals_trunc./1e6),precision));
+table3 = latex(vpa(sym(intervals_AS./1e6),precision));
+table4 = latex(vpa(sym(intervals_IS./1e6),precision));
+table5 = latex(vpa(sym(intervals_CV./1e6),precision));
+table6 = latex(vpa(sym(interval_total./1e6),precision));
+table7 = latex(vpa(sym(interval_total_trunc./1e6),precision));
+table8 = latex(vpa(sym(interval3./1e6),precision));
+table9 = latex(vpa(sym(interval_3d2s./1e6),precision));
+table10 = latex(vpa(sym(interval_3d2f./1e6),precision));
+table11 = latex(vpa(sym(interval_IS_total./1e6),precision));
+%table12 =
 %% The cdf of X ≤ x given that X in interval I
 function F = F_X_trunc(x, F_X, I) % 1
     if (x >= I(1) && x<= I(2))
